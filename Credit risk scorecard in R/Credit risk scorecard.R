@@ -1,0 +1,120 @@
+# Import the data into R-studio
+creditscore <- read.csv("Credit_data.csv")
+
+# Checking the structure of our data
+str(creditscore)
+
+# Look at the summary of our data
+summary(creditscore)
+
+# Remove Duration of credit in months, Credit amount and Age attributes
+S <- c(1,2,4,5,7,8,9,10,11,12,13,15,16,17,18,19,20,21)
+typeof(S)
+
+# Creating a function to convert integers to factors
+for(i in S) creditscore[, i] <- as.factor(creditscore[, i])
+
+# Now lets store the coverted data in creditscore_new
+creditscore_new <- creditscore[,S]
+
+# Now we will bifurcate our dataset
+# training and test data # Sample Indexes
+indexes = sample(1:nrow(creditscore), size = 0.3*nrow(creditscore))
+
+# Split data
+credit_test = creditscore_new[indexes,]
+credit_train = creditscore_new[-indexes,]
+
+# lets confirm the dimensions of both dataframes
+dim(credit_test)
+dim(credit_train)
+
+# Using Logistic regression model
+# Training the model using credit_train dataset
+# Choosing only 5 variables to determine the value of Creditability i.e. our dependent variable
+set.seed(1)
+LogisticModel <- glm(Creditability ~ Account.Balance + Payment.Status.of.Previous.Credit + Purpose + Length.of.current.employment + Sex...Marital.Status, family = binomial, data = credit_train)
+
+# Looking into the model we created
+LogisticModel
+
+# Let's say now a new applicant or customer has come in
+# Using predict() function in order to predict the creditability of a new applicant or customer
+# Creating dataframe for new applicant first
+newapplicant <- data.frame(Account.Balance=as.factor(4), Payment.Status.of.Previous.Credit=as.factor(2), Purpose=as.factor(1), Length.of.current.employment=as.factor(4), Sex...Marital.Status=as.factor(2))
+
+# Let's use the predict function now to find the probability value for our new applicant
+result <- predict(LogisticModel,type = 'response', newdata = newapplicant)
+result
+
+# Setting threshold level to 0.6, so if result > 0.6 then means creditability = 1, else = 0
+if(result>0.6) {Creditability = 1} else {Creditability = 0}
+Creditability
+
+# Fitting the model to our test dataframe, credit_test
+predicted_values <- predict(LogisticModel, type = 'response', newdata = credit_test)
+predicted_values
+
+# Plotting the predicted values
+plot(predicted_values)
+
+# Class Labels
+# Applying the threshold levels (-.6) and apply class labels (0 and 1) to all predicted values
+
+pred_value_labels = rep(as.factor("0"), length(credit_test))
+pred_value_labels = rep("0", length(credit_test[,1]))
+pred_value_labels[predicted_values>.6] = "1"
+pred_value_labels <- as.factor(pred_value_labels)
+pred_value_labels
+
+# Model Performance
+# Create the prediction object
+
+install.packages("ROCR", repos='http://cran.us.r-project.org')
+library(ROCR)
+
+pred <- prediction(predicted_values, credit_test$Creditability)
+pred
+
+# ROC curve
+# Creating the performance object
+roc.perf = performance(pred, measure = "tpr", x.measure = "fpr")
+roc.perf
+
+# Plot the ROC curve
+plot(roc.perf)
+abline(a=0,b=1)
+
+# Let's get the AUC or Area under the curve
+auc.perf = performance(pred, measure = "auc")
+
+# Let's view the Area under the curve
+auc.perf@y.values
+
+# Accuracy
+# Getting the overall accuracy for the simple predictions and plotting it
+acc.perf = performance(pred, measure = "acc")
+plot(acc.perf)
+
+# Extracting the maximum accuracy and the corresponding cutoff
+# getting the index for maximum accuracy and grabbing the corresponding cutoff
+ind = which.max(slot(acc.perf, "y.values")[[1]])
+acc = slot(acc.perf, "y.values")[[1]] [ind]
+cutoff = slot(acc.perf, "x.values")[[1]] [ind]
+
+# Print the result
+print(c(Accuracy = acc, cutoff = cutoff))
+
+# Install and load Caret package, Confusion Matrix function falls under the caret package
+install.packages("caret", repos='http://cran.us.r-project.org')
+library(caret)
+
+# Creating the Confusion Matrix for our data
+confusionMatrix(credit_test$Creditability, pred_value_labels)
+
+
+
+
+
+
+

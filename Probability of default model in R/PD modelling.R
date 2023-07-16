@@ -1,0 +1,315 @@
+# Importing the data into R
+loandata = read.csv("loan_data_PD.csv")
+
+# Set seed
+set.seed(0)
+
+# Look at structure and summary of our data
+str(loandata)
+summary(loandata)
+
+# Looking at the unique values in our dependent variable i.e. loan_status
+unique(loandata$loan_status)
+
+# Removing the values we do not need for loanstatuses Current, In Grace Period, Late (16-30 days), and empty ''
+loandata <- subset(loandata, loan_status != 'In Grace Period')
+loandata <- subset(loandata, loan_status != 'Late (16-30 days)')
+loandata <- subset(loandata, loan_status != 'Current')
+loandata <- subset(loandata, loan_status != '')
+
+# Install and load dplyr package
+packages("dplyr", repos='http://cran.us.r-project.org')
+library(dplyr)
+
+# Looking at how many loans are there for each status using groupby function
+loandata %>% group_by(loan_status) %>% summarise(count=n())
+
+# Install and load stringr package
+packages("stringr", repos='http://cran.us.r-project.org')
+library(stringr)
+
+# Combining Charged off, Default, and Late(31-120 days) into single category: Default
+# By using the str_detect function from stringr
+# the final result would be two loan statuses : Paid and Default
+loandata$loan_status = ifelse(str_detect(loandata$loan_status, "Paid"), loandata$loan_status, "Default")
+
+# Making sure our loan statuses data is correct
+loandata %>% group_by(loan_status) %>% summarise(count=n())
+
+# Plot loan status
+packages("ggplot2", repos='http://cran.us.r-project.org')
+library(ggplot2)
+
+gplot <- ggplot(loandata, aes(x=loan_status, fill=loan_status))
+gplot + geom_bar()
+
+# Default rate for each type of Loan grade i.e. which are A to G in our loandata
+# Use of dplyr package to find the number of defaults for each grade
+grade1 = loandata %>% filter(loan_status == "Default") %>% group_by(grade) %>% summarise(default_count = n())
+grade1
+
+# Calculating the default rate in each grade
+grade2 = loandata %>% group_by(grade) %>% summarise(count = n())
+
+grade3 <- grade2 %>% left_join(grade1) %>% 
+  mutate(default_rate = default_count/count*100) %>% 
+  select(grade, count, default_count, default_rate)
+grade3
+
+# Plot the default rate
+ggplot(grade3, aes(x=grade, y=default_rate, fill=grade)) + geom_bar(stat = "identity")
+
+# Loan Grade vs. Interest Rate
+# Firstly, converting interest rate attribute to numeric
+loandata$int_rate = (as.numeric(gsub(pattern = "%", replacement = "", x = loandata$int_rate)))
+
+# Grouping the data by grade and their mean interest rates
+x1 = loandata %>% filter(loan_status == "Default") %>% group_by(grade) %>% summarise(int_rate = mean(int_rate)) 
+x1
+
+# Plot the data
+ggplot(x1, aes(x=grade, y=int_rate, fill=grade)) + geom_bar(stat = "identity", position = "dodge")
+
+# Training and Test datasets
+# Using 30% of data for testing and 70% for training
+
+# Sample Indexes
+indexes = sample(1:nrow(loandata), size = 0.3*nrow(loandata))
+
+# Split data
+data_test = loandata[indexes,]
+data_train = loandata[-indexes,]
+
+dim(data_test)
+dim(data_train)
+
+colnames(data_train)
+
+# Discard attributes that are not needed
+discard_column = c("collection_recovery_fee", "emp_title",
+                   "funded_amnt_inv", "id", "installment",
+                   "last_credit_pull_d", "last_pymnt_d",
+                   "last_pymnt_amnt", "loan_amnt",
+                   "member_id", "next_pymnt_d",
+                   "num_tl_120dpd_2m", "num_tl_30dpd",
+                   "out_prncp", "out_prncp_inv",
+                   "recoveries", "total_pymnt",
+                   "total_pymnt_inv", "total_rec_int",
+                   "total_rec_late_fee", "total_rec_prncp",
+                   "url", "zip_code"
+)
+data_train = (data_train[,!(names(data_train) %in% discard_column)])
+
+dim(data_train)
+
+# Discarding grade attribute as well because sub_grade attribute is present
+data_train$grade = NULL
+
+# Discard columns with too many Na's - where percentage is greater than 50%
+data_train <- data_train[, -which(colMeans(is.na(data_train)) > 0.5)]
+
+# Discarding further attributes that are not needed
+discard_column = c("hardship_flag","hardship_type","hardship_reason",
+                   "hardship_status","hardship_start_date","hardship_end_date",
+                   "payment_plan_start_date","hardship_loan_status","disbursement_method",
+                   "debt_settlement_flag","debt_settlement_flag_date","settlement_status",
+                   "settlement_date"
+)
+data_train = (data_train[,!(names(data_train) %in% discard_column)])
+
+# Converting revol_util attribute to numeric datatype
+data_train$revol_util = (as.numeric(gsub(pattern = "%", replacement = "", x = data_train$revol_util)))
+
+packages("lubridate", repos='http://cran.us.r-project.org')
+library(lubridate)
+
+# Transforming earliest_cr_line attribute to the no. of days before the loan is issued
+data_train$earliest_cr_line = parse_date_time(str_c("01", data_train$issue_d), "dmy") - parse_date_time(str_c("01", data_train$earliest_cr_line), "dmy")
+data_train$earliest_cr_line = as.numeric(data_train$earliest_cr_line, units="days")
+
+# Analyzing default rate by issued month
+data_train$issue_m = sapply(data_train$issue_d, function(x){str_split(x,"-")[[1]][1]})
+
+tmp = data_train %>% filter(loan_status=="Default") %>% group_by(issue_m) %>% summarise(default_count = n())
+
+tmp1 = data_train %>% group_by(issue_m) %>% summarise(count=n())
+
+tmp1 %>% left_join(tmp) %>% mutate(default_rate = default_count/count)
+
+str(data_train$issue_m)
+
+# As seen the default rate does not vary much by the month it is issued, so we will proceed dropping the issue_d and issue_m attributes
+data_train$issue_m = NULL
+data_train$issue_d = NULL
+
+# Removing tmp and tmp1
+rm(tmp,tmp1)
+
+
+# Attributes with Zero Variance
+# In our dataset, we will look for predictors with zero variance and will proceed removing them
+# Let's define some generic functions that we will use later
+
+# Returns the Numeric columns only from a dataset
+getNumericColumns <- function(t) {
+  tn = sapply(t, function(x){is.numeric(x)})
+  return(names(tn)[which(tn)])
+}
+
+# Returns the character columns only from a dataset
+getCharColumns <- function(t) {
+  tn = sapply(t, function(x){is.character(x)})
+  return(names(tn)[which(tn)])
+}
+
+# Returns the factor columns only in a datset
+getFactorColumns <- function(t) {
+  tn = sapply(t, function(x){is.factor(x)})
+  return(names(tn)[which(tn)])
+}
+
+# Returns index of columns along with column names
+getIndexofColumns <- function(t, column_names) {
+  return(match(column_names, colnames(t)))
+}
+
+# Find character columns having same value and numeric columns having zero variance
+tmp = apply(data_train[getCharColumns(data_train)],2,function(x){length(unique(x))})
+
+tmp = tmp[tmp==1]
+
+tmp2 = apply(data_train[getNumericColumns(data_train)],2,function(x){(sd(x))})
+
+tmp2 = tmp2[tmp2==0]
+
+discard_column = c(names(tmp), names(tmp2))
+discard_column
+
+# There is only one predictor that meets this criteria
+# Dropping the zero-variance feature we have found
+data_train = data_train[,!names(data_train) %in% discard_column]
+
+# Dropping further attributes that are not needed
+# Let's look at attributes 'title' and 'purpose'
+table(data_train$title)
+table(data_train$purpose)
+
+# Since both attributes have same information, we will proceed dropping title
+data_train$title = NULL
+
+# Looking at 'desc' column
+str(data_train$desc)
+
+# Let's drop desc column as well since it contains mostly empty values
+data_train$desc = NULL
+
+# Default by States
+# Filtering out the states that have too small no. of loans(less than 1000)
+tmp = data_train %>% filter(loan_status=="Default") %>% group_by(addr_state) %>% summarise(default_count = n())
+
+tmp2 = data_train %>% group_by(addr_state) %>% summarise(count = n())
+
+tmp3 = tmp2 %>% left_join(tmp) %>% mutate(default_rate = default_count/count)
+
+tmp3
+
+# Order States by Default Rate to identify highest and lowest default rates
+# order by highest default rate
+
+high_default = (tmp3 %>% filter(count>1000) %>% arrange(desc(default_rate))) [1:10, "addr_state"]$addr_state
+high_default
+
+# order by lowest default rate
+
+low_default = (tmp3 %>% filter(count>1000) %>% arrange((default_rate))) [1:10, "addr_state"]$addr_state
+low_default
+
+# Creating Binary variables for 5 highest states and 5 lowest states, discarding the rest
+data_train$is_nj = ifelse(data_train$addr_state=='NJ',1,0)
+data_train$is_ny = ifelse(data_train$addr_state=='NY',1,0)
+data_train$is_pa = ifelse(data_train$addr_state=='PA',1,0)
+data_train$is_fl = ifelse(data_train$addr_state=='FL',1,0)
+data_train$is_oh = ifelse(data_train$addr_state=='OH',1,0)
+
+data_train$is_co = ifelse(data_train$addr_state=='CO',1,0)
+data_train$is_ga = ifelse(data_train$addr_state=='GA',1,0)
+data_train$is_az = ifelse(data_train$addr_state=='AZ',1,0)
+data_train$is_mi = ifelse(data_train$addr_state=='MI',1,0)
+data_train$is_va = ifelse(data_train$addr_state=='VA',1,0)
+
+
+# Let's proceed removing addr_state attribute and other temporary objects
+data_train$addr_state = NULL
+rm(tmp, tmp2, tmp3, high_default, low_default)
+
+
+# Remove Correlated features
+
+# Investigating if there are any correlation among features
+packages("corrplot", repos='http://cran.us.r-project.org')
+library(corrplot)
+corrplot(cor(data_train[getNumericColumns(data_train)], use="na.or.complete"))
+
+
+# Numeric features
+# Looking at all the numeric features
+str(data_train[getNumericColumns(data_train)])
+
+
+# Transforming annual_inc, revol_bal, avg_cur_bal, and bc_open_to_buy by dividing them by funded_amnt (amount of loan issued or funded)
+
+data_train$annual_inc = data_train$annual_inc/data_train$funded_amnt
+
+data_train$revol_bal = data_train$revol_bal/data_train$funded_amnt
+
+data_train$avg_cur_bal = data_train$avg_cur_bal/data_train$funded_amnt
+
+data_train$bc_open_to_buy = data_train$bc_open_to_buy/data_train$funded_amnt
+
+# Removing funded_amnt attribute
+data_train$funded_amnt = NULL
+
+
+# Character features
+# Looking at all the character features
+str(data_train[getCharColumns(data_train)])
+
+# Removing verification_status_joint attribute as it only contains nulls
+data_train$verification_status_joint = NULL
+
+# Looking at the home_ownership attribute
+table(data_train$home_ownership)
+
+
+# Let's now look at all loans or observation with pymnt_plan = "y", that all ended in being default status
+
+data_train %>% filter(pymnt_plan=="y") %>% select(pymnt_plan, loan_status)
+## we can see there are total of 64 observations that are defaulted but had payment plan as yes
+
+# In our training data with 41909 observation, 64 is a miniscule number of records
+# For our analysis purpose, we will remove the pymnt_plan attribute
+
+data_train$pymnt_plan = NULL
+
+
+# Logistic regression
+# Using the preProcess function from caret package to center and scale (Normalize) the data
+
+## we can try to remove the number of dimensions further by fitting the logistic regression
+## and investigate p-value of the coefficients. Our Null hypothesis is that each feature makes
+## no contribution to the predictive model (i.e. its coefficient is zero).
+## we will then discard each feature that fails to reject the hypothesis.
+
+
+packages("caret", repos='http://cran.us.r-project.org')
+library(caret)
+
+packages("rms", repos='http://cran.us.r-project.org')
+library(rms)
+
+trans.model = preProcess(data_train, method = c("center", "scale"))
+
+data_train = predict(trans.model, data_train)
+
+model = lrm(loan_status ~ ., data_train)
+model
