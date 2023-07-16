@@ -39,3 +39,23 @@ The evaluation metrics used in this project include:
 - Accuracy : 0.73
 - Sensitivity or Recall : 0.5663
 - Specificity : 0.7926
+
+
+
+#### Logistic regression equation:
+- Interpretation of our logistic regression equation:
+The criteria we chose to discard variables based on p-value, so we set our two-tailed P-value cutoff at 0.01, means we will discard those variables whose P-value exceed this cutoff and it is also called as alpha number so this is very important step as well.
+So our Logistic regression equation that we are actually building is as follows:
+Logit (p) = a +Bx1 + Cx2 ….
+So this is the final equation we are building and is important to interpret:
+Logit (p) is the independent variable, a is the coefficient then B is the coefficient and multiplied by x1 which is our variable and so on. The interpretation is as follows: so a one unit increase in x1 which is our variable will result in B times our coefficient increase in the log of odds which is Logit (P), ratio of success of failure in our case is probability of default. So in simple terms, a one unit increase in x1 will result in B times increase in the log of odds ratio of probability of default.
+Logit (P) explanation:
+Logit (P) = Log(p/1-p)
+      So it is the log of p or probability of say y =1 as our default divided by 1-p which is non-default, in other words Log of default by non default. So that is why we call p/1-p as our odds ratio and then we take the Log so we call it Log of odds ratio. So log-odd ratio is simply the logarithm of odds ratio. The reason Logarithm was used is because it will yield the normal distribution while shrinking or reducing extremely large values of odds ratio.
+So the equation, Logit (p) = a + Bx1 + Cx2 ….
+so from this equation we are going to interpret all the numbers and more essentially the coefficient as well the P-value so based on that, we will accept or reject the Null Hypthesis based on alpha which is the cutoff at 0.01.
+
+Any collaboration or further assistance would be highly appreciated to solidify the models effectiveness.
+
+Thanks.
+
